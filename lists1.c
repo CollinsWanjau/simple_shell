@@ -1,154 +1,122 @@
 #include "shell.h"
 
 /**
- * is_chain - test if current char in buffer is a chain delimeter
- * @info: the parameter struct
- * @buf: the char buffer
- * @p: address of current position in buf
+ * list_len - determines length of linked list
+ * @h: pointer to first node
  *
- * Return: 1 if chain delimeter, 0 otherwise
+ * Return: size of list
  */
-int is_chain(info_t *info, char *buf, size_t *p)
+size_t list_len(const list_t *h)
 {
-	size_t j = *p;
+	size_t i = 0;
 
-	if (buf[j] == '|' && buf[j + 1] == '|')
+	while (h)
 	{
-		buf[j] = 0;
-		j++;
-		info->cmd_buf_type = CMD_OR;
+		h = h->next;
+		i++;
 	}
-	else if (buf[j] == '&' && buf[j + 1] == '&')
-	{
-		buf[j] = 0;
-		j++;
-		info->cmd_buf_type = CMD_AND;
-	}
-	else if (buf[j] == ';') /* found end of this command */
-	{
-		buf[j] = 0; /* replace semicolon with null */
-		info->cmd_buf_type = CMD_CHAIN;
-	}
-	else
-		return (0);
-	*p = j;
-	return (1);
+	return (i);
 }
 
 /**
- * check_chain - checks we should continue chaining based on last status
- * @info: the parameter struct
- * @buf: the char buffer
- * @p: address of current position in buf
- * @i: starting position in buf
- * @len: length of buf
+ * list_to_strings - returns an array of strings of the list->str
+ * @head: pointer to first node
  *
- * Return: Void
+ * Return: array of strings
  */
-void check_chain(info_t *info, char *buf, size_t *p, size_t i, size_t len)
+char **list_to_strings(list_t *head)
 {
-	size_t j = *p;
+	list_t *node = head;
+	size_t i = list_len(head), j;
+	char **strs;
+	char *str;
 
-	if (info->cmd_buf_type == CMD_AND)
+	if (!head || !i)
+		return (NULL);
+	strs = malloc(sizeof(char *) * (i + 1));
+	if (!strs)
+		return (NULL);
+	for (i = 0; node; node = node->next, i++)
 	{
-		if (info->status)
+		str = malloc(_strlen(node->str) + 1);
+		if (!str)
 		{
-			buf[i] = 0;
-			j = len;
+			for (j = 0; j < i; j++)
+				free(strs[j]);
+			free(strs);
+			return (NULL);
 		}
-	}
-	if (info->cmd_buf_type == CMD_OR)
-	{
-		if (!info->status)
-		{
-			buf[i] = 0;
-			j = len;
-		}
-	}
 
-	*p = j;
+		str = _strcpy(str, node->str);
+		strs[i] = str;
+	}
+	strs[i] = NULL;
+	return (strs);
+}
+
+
+/**
+ * print_list - prints all elements of a list_t linked list
+ * @h: pointer to first node
+ *
+ * Return: size of list
+ */
+size_t print_list(const list_t *h)
+{
+	size_t i = 0;
+
+	while (h)
+	{
+		_puts(convert_number(h->num, 10, 0));
+		_putchar(':');
+		_putchar(' ');
+		_puts(h->str ? h->str : "(nil)");
+		_puts("\n");
+		h = h->next;
+		i++;
+	}
+	return (i);
 }
 
 /**
- * replace_alias - replaces an aliases in the tokenized string
- * @info: the parameter struct
+ * node_starts_with - returns node whose string starts with prefix
+ * @node: pointer to list head
+ * @prefix: string to match
+ * @c: the next character after prefix to match
  *
- * Return: 1 if replaced, 0 otherwise
+ * Return: match node or null
  */
-int replace_alias(info_t *info)
+list_t *node_starts_with(list_t *node, char *prefix, char c)
 {
-	int i;
-	list_t *node;
-	char *p;
+	char *p = NULL;
 
-	for (i = 0; i < 10; i++)
+	while (node)
 	{
-		node = node_starts_with(info->alias, info->argv[0], '=');
-		if (!node)
-			return (0);
-		free(info->argv[0]);
-		p = _strchr(node->str, '=');
-		if (!p)
-			return (0);
-		p = _strdup(p + 1);
-		if (!p)
-			return (0);
-		info->argv[0] = p;
+		p = starts_with(node->str, prefix);
+		if (p && ((c == -1) || (*p == c)))
+			return (node);
+		node = node->next;
 	}
-	return (1);
+	return (NULL);
 }
 
 /**
- * replace_vars - replaces vars in the tokenized string
- * @info: the parameter struct
+ * get_node_index - gets the index of a node
+ * @head: pointer to list head
+ * @node: pointer to the node
  *
- * Return: 1 if replaced, 0 otherwise
+ * Return: index of node or -1
  */
-int replace_vars(info_t *info)
+ssize_t get_node_index(list_t *head, list_t *node)
 {
-	int i = 0;
-	list_t *node;
+	size_t i = 0;
 
-	for (i = 0; info->argv[i]; i++)
+	while (head)
 	{
-		if (info->argv[i][0] != '$' || !info->argv[i][1])
-			continue;
-
-		if (!_strcmp(info->argv[i], "$?"))
-		{
-			replace_string(&(info->argv[i]),
-				_strdup(convert_number(info->status, 10, 0)));
-			continue;
-		}
-		if (!_strcmp(info->argv[i], "$$"))
-		{
-			replace_string(&(info->argv[i]),
-				_strdup(convert_number(getpid(), 10, 0)));
-			continue;
-		}
-		node = node_starts_with(info->env, &info->argv[i][1], '=');
-		if (node)
-		{
-			replace_string(&(info->argv[i]),
-				_strdup(_strchr(node->str, '=') + 1));
-			continue;
-		}
-		replace_string(&info->argv[i], _strdup(""));
-
+		if (head == node)
+			return (i);
+		head = head->next;
+		i++;
 	}
-	return (0);
-}
-
-/**
- * replace_string - replaces string
- * @old: address of old string
- * @new: new string
- *
- * Return: 1 if replaced, 0 otherwise
- */
-int replace_string(char **old, char *new)
-{
-	free(*old);
-	*old = new;
-	return (1);
+	return (-1);
 }
